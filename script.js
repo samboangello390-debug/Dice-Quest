@@ -17,7 +17,26 @@ gold:0,
 
 exp:0,
 
-level:1
+level:1,
+};
+
+player.baseDamage ??= 5;
+player.baseAC ??= 5;
+
+player.bonusDamage ??= 0;
+player.bonusAC ??= 0;
+
+player.inventory ??= [];
+
+player.equipment ??= {
+weapon:null,
+armor:null
+};
+
+player.growth ??= {
+damage:0,
+ac:0,
+last:""
 };
 
 let enemy = null;
@@ -55,18 +74,25 @@ function updateStats(){
 
 stats.innerHTML=
 `
+Version:
+${VERSION}
+
+<br>
+
 ❤️ HP:
 ${player.hp}/${player.maxHp}
 
 <br>
 
 🎲 DMG:
-D${player.damageDice}
+D${player.baseDamage+
+player.bonusDamage}
 
 <br>
 
 🛡️ AC:
-${player.ac}
+${player.baseAC+
+player.bonusAC}
 
 <br>
 
@@ -296,6 +322,12 @@ action:dodge
 },
 
 {
+text:
+"🎒 Inventory",
+action:inventory
+},
+
+{
 text:"🏃 Run",
 action:showTown
 }
@@ -313,6 +345,7 @@ roll(player.attackDice);
 
 let log =
 `You rolled ${attackRoll}<br>`;
+
 
 if(
 attackRoll === 1
@@ -332,14 +365,15 @@ return;
 
 }
 
+
 if(
-attackRoll >=
-enemy.ac
+attackRoll >= enemy.ac
 ){
 
 let damage =
 roll(
-player.damageDice
+player.baseDamage +
+player.bonusDamage
 );
 
 if(
@@ -351,7 +385,7 @@ damage *= 2;
 
 log +=
 `
-CRITICAL!
+Critical!
 
 <br>
 `;
@@ -384,10 +418,10 @@ Miss!
 
 
 if(
-enemy.hp<=0
+enemy.hp <= 0
 ){
 
-text.innerHTML=
+text.innerHTML =
 log;
 
 win();
@@ -401,12 +435,18 @@ return;
 enemyTurn(log);
 
 }
+
+
+
 function enemyTurn(log){
 
 let attackRoll =
 roll(
 enemy.attackDice
 );
+
+
+
 if(
 enemy.intent ===
 "accurate"
@@ -415,18 +455,6 @@ enemy.intent ===
 attackRoll++;
 
 }
-
-log +=
-`
-<br><br>
-
-${enemy.name}
-rolled
-
-${attackRoll}
-
-<br>
-`;
 
 
 
@@ -443,15 +471,33 @@ false;
 
 
 
+log +=
+`
+<br><br>
+
+Enemy rolled
+
+${attackRoll}
+
+<br>
+`;
+
+
+
 if(
 attackRoll >=
-player.ac
+(
+player.baseAC +
+player.bonusAC
+)
 ){
 
 let damage =
 roll(
 enemy.damageDice
 );
+
+
 
 if(
 enemy.intent ===
@@ -462,13 +508,15 @@ damage += 2;
 
 }
 
+
+
 if(
 enemy.damageModifier
 ){
 
 damage =
 Math.ceil(
-damage*
+damage *
 enemy.damageModifier
 );
 
@@ -477,28 +525,19 @@ null;
 
 }
 
-if(
-attackRoll ===
-enemy.attackDice
-){
 
-damage *= 2;
 
-log +=
-`
-Critical!
+player.hp -=
+damage;
 
-<br>
-`;
 
-}
-
-player.hp -= damage;
 
 log +=
 `
 You took
+
 ${damage}
+
 damage
 `;
 
@@ -516,7 +555,7 @@ Enemy missed
 
 
 if(
-player.hp<=0
+player.hp <= 0
 ){
 
 gameOver();
@@ -581,6 +620,8 @@ ${enemy.name}
 +${reward} Gold
 `;
 
+dropItem();
+
 levelCheck();
 
 save();
@@ -596,12 +637,113 @@ action:showTown
 
 }
 
+function dropItem(){
 
+let rollDrop =
+Math.random();
+
+let item =
+null;
+
+if(
+rollDrop<0.2
+){
+
+item={
+name:
+"Rusty Sword",
+
+type:
+"weapon",
+
+damage:2
+};
+
+}
+
+else if(
+rollDrop<0.4
+){
+
+item={
+name:
+"Leather Armor",
+
+type:
+"armor",
+
+ac:1
+};
+
+}
+
+
+
+if(item){
+
+player.inventory
+.push(
+item
+);
+
+text.innerHTML +=
+`
+<br><br>
+
+Loot:
+
+${item.name}
+`;
+
+}
+
+}
+
+function equip(index){
+
+let item =
+player.inventory[
+index
+];
+
+if(
+item.type===
+"weapon"
+){
+
+player.equipment
+.weapon=
+item;
+
+player.bonusDamage=
+item.damage;
+
+}
+
+if(
+item.type===
+"armor"
+){
+
+player.equipment
+.armor=
+item;
+
+player.bonusAC=
+item.ac;
+
+}
+
+save();
+
+showTown();
+
+}
 
 function levelCheck(){
 
 if(
-player.exp>=
+player.exp >=
 player.level*50
 ){
 
@@ -609,19 +751,77 @@ player.level++;
 
 player.maxHp+=5;
 
-player.damageDice++;
-player.ac++;
+if(
+player.level%5===0
+){
+
+let choice=
+Mth.random()<0.5
+?
+"damage"
+:
+"ac";
+
+
+
+if(
+choice===
+player.growth.last
+){
+
+choice=
+choice===
+"damage"
+?
+"ac"
+:
+"damage";
+
+}
+
+
+
+if(
+choice===
+"damage"
+&&
+player.growth.damage
+<10
+){
+
+player.baseDamage++;
+
+player.growth.damage++;
+
+}
+
+
+
+if(
+choice===
+"ac"
+&&
+player.growth.ac
+<10
+){
+
+player.baseAC++;
+
+player.growth.ac++;
+
+}
+
+
+
+player.growth.last=
+choice;
+
+}
+
+
 
 player.hp=
 player.maxHp;
-
-text.innerHTML+=
-`
-<br><br>
-
-LEVEL UP!
-
-`;
 
 }
 
@@ -652,7 +852,52 @@ action:showTown
 
 }
 
+function inventory(){
 
+updateStats();
+
+text.innerHTML=
+`
+Inventory
+<br><br>
+`;
+
+buttons.innerHTML=
+"";
+
+
+
+player.inventory
+.forEach(
+(
+item,
+i
+)=>{
+
+let b=
+document
+.createElement(
+"button"
+);
+
+b.textContent=
+`
+Equip
+${item.name}
+`;
+
+b.onclick=
+()=>equip(i);
+
+buttons
+.appendChild(
+b
+);
+
+}
+);
+
+}
 
 function gameOver(){
 
